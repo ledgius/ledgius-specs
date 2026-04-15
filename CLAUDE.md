@@ -65,6 +65,13 @@ domains/
 - Don't implement against Draft without explicit authorisation
 - Current version is the authoritative source — use git history for change tracking
 
+### Terminology
+- Every spec includes a `# Terms` section immediately after `# Summary` (heading is mandatory; body may say "no domain-specific terms" if none).
+- A term is defined in **one** spec only — the spec that introduces it. Other specs cross-reference: `Vocabulary used in this spec (term-A, term-B) is defined canonically in **R-XXXX §Terms**.`
+- Definitions use a two-column markdown table: `| **Term** | Definition. |`.
+- When picking a name for a new concept, avoid words already used elsewhere with a different meaning — distinct vocabulary beats ambiguity. Document any surprising naming choice in the term's definition cell.
+- Full convention: `Requirement Canonical Templates.md` §"Terminology convention".
+
 ### Traceability
 - PRs reference governing spec IDs in the description
 - Commit messages reference primary requirement

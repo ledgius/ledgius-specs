@@ -123,6 +123,75 @@ Allowed statuses:
 - `Deprecated` and `Superseded` documents must not be used as the primary source for new implementation work.
 - If a requirement changes materially, either revise it carefully with update history or create a new requirement and mark the old one `Superseded`.
 
+## Terminology convention
+
+Terminology is where humans most often confuse themselves and each other.
+Every spec that introduces or uses non-obvious vocabulary MUST include a
+`# Terms` section. The four canonical templates (`R`, `A`, `T`, `AI`)
+include this section by default, immediately after `# Summary`, so readers
+encounter definitions before the body.
+
+### Rules
+
+1. **Single source of truth.** A term is defined in *one* spec — the spec
+   that first introduces it (typically the requirement). Every other spec
+   that uses the term carries a one-line cross-reference at the top of its
+   `# Terms` section pointing back to the canonical definition. No spec
+   should redefine a term that another spec already owns.
+
+2. **Cross-reference shape.** When a spec only re-uses terms defined
+   elsewhere, its `# Terms` section is a single sentence:
+
+   ```md
+   # Terms
+
+   Vocabulary used in this spec (term-A, term-B, term-C) is defined
+   canonically in **R-XXXX §Terms**.
+   ```
+
+3. **Definition shape.** When a spec is the canonical source for one or
+   more terms, use a two-column markdown table. Term names are **bold** in
+   the first column. Definitions are full sentences and call out the
+   relationship to adjacent terms. Example:
+
+   ```md
+   # Terms
+
+   | Term | Definition |
+   |---|---|
+   | **Population** | A top-level category of user with a distinct relationship to the platform. A population is *not* a role — it is the broad class a user belongs to. |
+   | **Role** | Within a population, the fine-grained rank that determines what actions the user may take. Role exists *inside* a population, never across populations. |
+   ```
+
+4. **Avoid overloaded words.** When picking a name for a new concept,
+   check whether the word is already used elsewhere in the specs with a
+   different meaning. If it is, pick a different word — even at the cost
+   of a slightly more clinical name. Distinct vocabulary is cheaper than
+   ambiguity. Document the rationale in the term's definition cell when
+   the chosen word might surprise a reader.
+
+5. **Plural and adjective forms.** Define terms in their singular form
+   ("Population", not "Populations"). Adjective and qualifier forms
+   (e.g. "active role", "scope") are listed alongside if their meaning is
+   not obvious from the root term.
+
+6. **Disambiguation note.** When two terms share a word root (e.g. the
+   `accountant` *population* vs. the `accountant` *role within the
+   customer population*), call out the disambiguation explicitly in both
+   definitions. Code-side enforcement: always pair the qualifier with the
+   root in identifiers (`active_role=customer`, not just `accountant`).
+
+7. **Term churn.** If a term is renamed, the old definition row stays in
+   the canonical spec with status `(superseded by <new term>, YYYY-MM-DD)`
+   so search hits on the old name still find an answer. Cross-reference
+   specs are mechanically updated.
+
+8. **Empty `# Terms` section.** If a spec has no novel vocabulary and
+   re-uses no domain terminology that warrants a pointer, the `# Terms`
+   section may contain a single line: `_No domain-specific terms beyond
+   plain English._` — the section heading itself is mandatory so future
+   readers know terminology was considered.
+
 ## Canonical template: Requirement (`R`)
 
 ```md
@@ -148,6 +217,8 @@ Supersedes:
 Superseded By:
 
 # Summary
+
+# Terms
 
 # Problem / Business Context
 
@@ -211,6 +282,8 @@ Superseded By:
 
 # Summary
 
+# Terms
+
 # Requirement Link
 
 # Technical Context
@@ -270,6 +343,8 @@ Superseded By:
 
 # Summary
 
+# Terms
+
 # Requirement and Design References
 
 # Assumptions
@@ -320,6 +395,8 @@ Supersedes:
 Superseded By:
 
 # Summary
+
+# Terms
 
 # Authoritative Sources
 

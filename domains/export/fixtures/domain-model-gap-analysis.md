@@ -82,15 +82,15 @@ The same table structure will be filled in for each of the entities below as imp
 
 | Entity | MYOB catalogue section | Xero catalogue section | Analysis status |
 |---|---|---|---|
-| Chart of Account | `Account` | `Account` | **pending** — queue after V1.33-V1.35 imports start landing real data. |
-| Invoice (AR) | `Sale/Invoice/Item` and friends | `Invoice` + `LineItem` | **partial** — R-0017 FR-025 + V1.34 landed `invoice.account_id` + `invoice.tax_id` driven by J-EXP (Xero export blocker). Remaining line-level fields TBD when an import scenario hits. |
-| Bill (AP) | `Purchase/Bill/Item` | (same `Invoice` type, `Type=ACCPAY`) | **pending** — mirror of Invoice analysis. |
-| CreditNote | `Sale/CreditNote/*` | `CreditNote` | **partial** — R-0017 FR-026 + V1.35 landed `document_type` via J-EXP. Remaining fields TBD. |
-| Payment | `Sale/Payment` + `Purchase/Payment` | `Payment` | **pending** |
-| Journal | `GeneralJournal` | `ManualJournal` | **pending** |
-| BankTransaction / Transfer | `Banking/SpendMoney` + `ReceiveMoney` + `TransferMoney` | `BankTransaction` + `BankTransfer` | **pending** |
-| TaxRate / TaxCode | `GeneralLedger/TaxCode` | `TaxRate` | **pending** |
-| Item (inventory / service) | `Inventory/Item` | `Item` | **pending** — out of scope per R-0017 "Inventory on-hand quantity import" exclusion, but structure TBD. |
+| Chart of Account | `Account` | `Account` | **complete (no gaps)** — Ledgius `account` table covers code, name, category, description, tax linkage. MYOB AO import YAML config maps `code`/`name`/`account_type`/`opening_balance` to staging fields; Xero export maps `code`/`name`/`category`/`tax_code`/`description` out. Both MYOB and Xero have additional account-level fields (BankAccountNumber, BankAccountName, ReportingCode) but **no import or export scenario has surfaced a gap** — leaving these out per the case-by-case rule. Real-DB SourceProvider (DBProvider) reads from `account` table with category translation. |
+| Invoice (AR) | `Sale/Invoice/Item` and friends | `Invoice` + `LineItem` | **complete for v1** — V1.34 landed per-line `invoice.account_id` FK → `account(id)` and `invoice.tax_id` FK → `tax_code(id)` (J-EXP: Xero export blocker). V1.35 landed `ar.document_type` (J-EXP: eliminates is_return decoding). DBProvider reads `ar` + `invoice` + resolves `account.accno` and `tax_code.code` per line. Fixtures populate both FKs. MYOB/Xero have additional line fields (Tracking, DiscountRate, ItemCode) — **no scenario surfaced** for these yet. |
+| Bill (AP) | `Purchase/Bill/Item` | (same `Invoice` type, `Type=ACCPAY`) | **complete for v1** — mirrors Invoice (AR). V1.34 + V1.35 fields populated by payable service. DBProvider reads `ap` + `invoice` with same join pattern. |
+| CreditNote | `Sale/CreditNote/*` | `CreditNote` | **complete for v1** — V1.35 `document_type='credit_note'` on both AR and AP. DBProvider fetches from ar/ap with `document_type='credit_note'` and tags direction (sales/purchase). |
+| TaxRate / TaxCode | `GeneralLedger/TaxCode` | `TaxRate` | **complete for v1** — Ledgius `tax_code` table carries code, name, rate, jurisdiction, effective dates. DBProvider reads active AU codes with rate × 100 for percent. MYOB has `TaxCodeAccount` (linked GL account) — Ledgius has `chart_account_id` FK, already covered. No gap. |
+| Payment | `Sale/Payment` + `Purchase/Payment` | `Payment` | **pending** — no import or export scenario has required payment fields yet. |
+| Journal | `GeneralJournal` | `ManualJournal` | **pending** — MYOB AO import handles journals as transaction lines; no separate journal entity needed for v1 import. Manual journal export TBD. |
+| BankTransaction / Transfer | `Banking/SpendMoney` + `ReceiveMoney` + `TransferMoney` | `BankTransaction` + `BankTransfer` | **pending** — bank feed domain (R-0020) handles live feeds; file-based bank transaction import/export not yet scoped. |
+| Item (inventory / service) | `Inventory/Item` | `Item` | **pending** — out of scope per R-0017 "Inventory on-hand quantity import" exclusion. |
 | Employee / Payroll | `Contact/Employee` + `PayrollDetails` | `Employee` | **pending** — R-0017 scopes payroll to "basic employee records only". |
 
 ### How to fill in a pending entity

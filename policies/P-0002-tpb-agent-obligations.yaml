@@ -1,0 +1,26 @@
+code: P-0002
+version: "1.0"
+title: Tax/BAS Agent Record-Keeping and Cloud Obligations
+short_title: TPB(I) 47/2024
+jurisdiction: AU
+authority: Tax Practitioners Board
+source_url: https://www.tpb.gov.au/information-instruments
+effective_from: "2025-07-01"
+effective_to: null
+summary: >
+  From 1 July 2025, registered tax and BAS agents must keep proper
+  client-service records with explicit cloud-storage and disclosure
+  obligations. Systems used by agents must support data export,
+  audit trail access, and client data portability. Direct driver for
+  Ledgius export completeness — agents must be able to extract a
+  full data package for any client on demand.
+applies_to:
+  - export
+  - audit
+  - reporting
+  - contact
+severity: mandatory
+tags:
+  - tax-agent
+  - cloud-storage
+  - data-portability

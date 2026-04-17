@@ -1,0 +1,27 @@
+code: P-0008
+version: "1.0"
+title: GST and Business Activity Statement Reporting
+short_title: GST Act 1999 + ATO BAS
+jurisdiction: AU
+authority: Australian Taxation Office
+source_url: https://www.ato.gov.au/businesses-and-organisations/gst-excise-and-indirect-taxes/gst
+effective_from: "2000-07-01"
+effective_to: null
+summary: >
+  Businesses registered for GST must lodge BAS quarterly or monthly,
+  reporting GST collected (1A), GST paid (1B), and net GST position.
+  Every transaction must carry a tax code. Capital acquisitions report
+  separately at G10. Drives Ledgius tax code enforcement on every
+  invoice line, BAS calculation engine, and GST reconciliation.
+applies_to:
+  - tax
+  - receivable
+  - payable
+  - assets
+  - reporting
+  - export
+severity: mandatory
+tags:
+  - gst
+  - bas
+  - tax-reporting

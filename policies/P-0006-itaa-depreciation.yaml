@@ -1,0 +1,23 @@
+code: P-0006
+version: "1.0"
+title: Capital Allowances — Depreciation of Depreciating Assets
+short_title: ITAA 1997 Div 40 + ATO TR 2022/1
+jurisdiction: AU
+authority: Australian Taxation Office
+source_url: https://www.ato.gov.au/businesses-and-organisations/income-deductions-and-concessions/depreciation-and-capital-expenses-and-டworkings/general-depreciation-rules
+effective_from: "1997-07-01"
+effective_to: null
+summary: >
+  Rules for calculating depreciation of business assets using diminishing
+  value or prime cost methods. Includes instant asset write-off thresholds
+  (updated annually in budget). Ledgius must calculate depreciation per
+  ATO formulas and support the instant write-off pathway.
+applies_to:
+  - assets
+  - tax
+  - reporting
+severity: mandatory
+tags:
+  - depreciation
+  - capital-allowances
+  - instant-write-off

@@ -1,0 +1,25 @@
+code: P-0005
+version: "1.0"
+title: ASD Essential Eight Maturity Level 2
+short_title: ASD Essential Eight ML2
+jurisdiction: AU
+authority: Australian Signals Directorate
+source_url: https://www.cyber.gov.au/resources-business-and-government/essential-cyber-security/essential-eight
+effective_from: "2023-11-01"
+effective_to: null
+summary: >
+  Becoming the 2026 SaaS security baseline for Australian government
+  and regulated-industry procurement. ML2 requires application
+  whitelisting, patching, MFA, admin privilege restriction, OS hardening,
+  backup/recovery, and logging. Drives Ledgius platform security
+  architecture — particularly around authentication, audit logging,
+  and data export/backup capability.
+applies_to:
+  - audit
+  - export
+  - platform
+severity: recommended
+tags:
+  - cybersecurity
+  - essential-eight
+  - saas-baseline

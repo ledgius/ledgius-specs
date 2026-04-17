@@ -1,0 +1,28 @@
+code: P-0001
+version: "1.0"
+title: Electronic Record-Keeping for Tax Purposes
+short_title: ATO TR 2018/2
+jurisdiction: AU
+authority: Australian Taxation Office
+source_url: https://www.ato.gov.au/law/view/document?docid=TXR/TR20182/NAT/ATO/00001
+effective_from: "2018-01-01"
+effective_to: null
+summary: >
+  Taxpayers who keep electronic records must ensure they are accessible,
+  readable, and unalterable. Audit trails and system logs form part of
+  the record-keeping obligation. Ledgius must preserve transaction
+  history, prevent backdating, and provide export capability for ATO
+  review.
+applies_to:
+  - export
+  - import
+  - audit
+  - reporting
+  - receivable
+  - payable
+  - journal
+severity: mandatory
+tags:
+  - record-keeping
+  - electronic-records
+  - audit-trail

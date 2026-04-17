@@ -1,0 +1,23 @@
+code: P-0007
+version: "1.0"
+title: General Deductions — Interest on Business Borrowings
+short_title: ITAA 1997 s8-1
+jurisdiction: AU
+authority: Australian Taxation Office
+source_url: https://www.ato.gov.au/individuals-and-families/investments-and-assets/interest-deductions
+effective_from: "1997-07-01"
+effective_to: null
+summary: >
+  Interest paid on borrowings used for business purposes is deductible.
+  Each loan payment must be split into principal (not deductible) and
+  interest (deductible) components. Mixed-purpose loans require
+  apportionment. Drives the loan payment recording workflow.
+applies_to:
+  - liabilities
+  - tax
+  - reporting
+severity: mandatory
+tags:
+  - interest-deductions
+  - loans
+  - tax-deductions

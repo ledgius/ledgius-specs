@@ -1,0 +1,26 @@
+code: P-0004
+version: "1.0"
+title: Code of Ethics — Technology and Data Provenance
+short_title: APES 110 (Jun 2024)
+jurisdiction: AU
+authority: Accounting Professional & Ethical Standards Board
+source_url: https://apesb.org.au/standards-guidance/apes-110/
+effective_from: "2024-06-01"
+effective_to: null
+summary: >
+  The compiled June 2024 revision includes technology-specific provisions
+  requiring accountants to evaluate data provenance and integrity when
+  using cloud accounting systems. Systems must support verifiable data
+  lineage — where did this number come from, who changed it, when.
+  Drives the audit trail and import provenance stamping requirements.
+applies_to:
+  - audit
+  - import
+  - export
+  - journal
+  - reporting
+severity: mandatory
+tags:
+  - ethics
+  - data-provenance
+  - data-integrity

@@ -1,0 +1,24 @@
+code: P-0010
+version: "1.0"
+title: Single Touch Payroll Phase 2
+short_title: STP Phase 2
+jurisdiction: AU
+authority: Australian Taxation Office
+source_url: https://www.ato.gov.au/businesses-and-organisations/single-touch-payroll
+effective_from: "2022-01-01"
+effective_to: null
+summary: >
+  All employers must report payroll information (gross, tax, super,
+  allowances, deductions, employment type) to the ATO at or before
+  each pay event via STP. Phase 2 expanded reporting to include
+  disaggregated gross amounts, income types, and country codes.
+  Drives Ledgius payroll data model completeness and STP submission.
+applies_to:
+  - payroll
+  - reporting
+  - compliance
+severity: mandatory
+tags:
+  - stp
+  - payroll-reporting
+  - ato-reporting

@@ -1,0 +1,25 @@
+code: P-0009
+version: "1.0"
+title: Superannuation Guarantee
+short_title: SG Act 1992 + ATO SG Charge
+jurisdiction: AU
+authority: Australian Taxation Office
+source_url: https://www.ato.gov.au/businesses-and-organisations/super-for-employers/paying-super-contributions/how-much-super-to-pay
+effective_from: "1992-07-01"
+effective_to: null
+summary: >
+  Employers must pay SG contributions (currently 12% of ordinary time
+  earnings for FY2025-26) quarterly. Contributions must be received by
+  the employee's super fund by the quarterly due date (28th of the
+  month following quarter end). Late payments incur the Super Guarantee
+  Charge (SGC) — interest + admin fee + lost tax deductibility. Drives
+  the Super Obligations page and payroll SG calculation.
+applies_to:
+  - payroll
+  - reporting
+  - compliance
+severity: mandatory
+tags:
+  - superannuation
+  - employer-obligations
+  - quarterly-due-dates

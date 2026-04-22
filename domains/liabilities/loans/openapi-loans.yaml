@@ -1,0 +1,816 @@
+# Spec references: R-0063, A-0044, A-0045, T-0034, T-0035, T-0036, T-0037.
+#
+# OpenAPI contract for the loans endpoints. Authoritative request/response
+# shape — backend and frontend must conform.
+
+openapi: 3.1.0
+info:
+  title: Ledgius Loans API
+  version: "1.0.0"
+  description: |
+    Endpoints for managing business loans: register, origination, interest
+    accrual, payment recording, payout, write-off. All endpoints are under
+    `/api/v1` and require:
+      - Authenticated JWT with a selected tenant.
+      - Plan feature: `loans`.
+      - Role function permission (see `x-function` on each operation).
+
+servers:
+  - url: https://api.ledgius.com/api/v1
+    description: Production
+  - url: http://localhost:8090/api/v1
+    description: Local dev
+
+tags:
+  - name: Loans
+    description: Register, detail, non-posting edit, schedule, activity.
+  - name: Originations
+    description: Originate a new loan.
+  - name: Payments
+    description: Record + reverse loan payments.
+  - name: Payouts
+    description: Early settlement.
+  - name: Accruals
+    description: Periodic interest accrual engine.
+  - name: WriteOffs
+    description: Debt forgiveness / bad debt.
+
+paths:
+  /loans:
+    get:
+      tags: [Loans]
+      summary: List loans
+      operationId: listLoans
+      x-function: loans:view
+      parameters:
+        - in: query
+          name: status
+          schema: { type: array, items: { $ref: '#/components/schemas/LoanStatus' } }
+          style: form
+          explode: true
+        - in: query
+          name: lender_id
+          schema: { type: integer }
+        - in: query
+          name: maturity_within_months
+          schema: { type: integer, minimum: 1, maximum: 240 }
+        - in: query
+          name: q
+          schema: { type: string }
+        - in: query
+          name: include_paid_out
+          schema: { type: boolean, default: false }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoanListResponse' }
+    post:
+      tags: [Originations]
+      summary: Originate a new loan
+      operationId: originateLoan
+      x-function: loans:create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OriginateLoanRequest' }
+      responses:
+        '201':
+          description: Loan originated.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Loan' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '402': { $ref: '#/components/responses/FeatureUnavailable' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Conflict — period locked, account unresolvable.
+
+  /loans/{id}:
+    parameters:
+      - { $ref: '#/components/parameters/LoanId' }
+    get:
+      tags: [Loans]
+      summary: Get a loan by id
+      operationId: getLoan
+      x-function: loans:view
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Loan' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Loans]
+      summary: Edit non-posting fields
+      operationId: editLoanNonPosting
+      x-function: loans:edit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EditLoanNonPostingRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Loan' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /loans/{id}/activity:
+    parameters:
+      - { $ref: '#/components/parameters/LoanId' }
+      - { $ref: '#/components/parameters/Page' }
+      - { $ref: '#/components/parameters/PageSize' }
+    get:
+      tags: [Loans]
+      summary: Audit timeline for a loan
+      operationId: listLoanActivity
+      x-function: loans:view
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ActivityListResponse' }
+
+  /loans/{id}/schedule:
+    parameters:
+      - { $ref: '#/components/parameters/LoanId' }
+    get:
+      tags: [Loans]
+      summary: Projected repayment schedule
+      operationId: getLoanSchedule
+      x-function: loans:view
+      parameters:
+        - in: query
+          name: periods
+          schema: { type: integer, minimum: 1, maximum: 360, default: 24 }
+          description: Number of future periods to project.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoanSchedule' }
+
+  /loans/{id}/payments:
+    parameters:
+      - { $ref: '#/components/parameters/LoanId' }
+    get:
+      tags: [Payments]
+      summary: List payments for a loan
+      operationId: listLoanPayments
+      x-function: loans:view
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoanPaymentListResponse' }
+    post:
+      tags: [Payments]
+      summary: Record a loan payment
+      operationId: recordLoanPayment
+      x-function: loans:record_payment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RecordPaymentRequest' }
+      responses:
+        '201':
+          description: Payment recorded.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoanPayment' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409':
+          description: Conflict — overpayment, period locked.
+
+  /loans/{id}/payments/{payment_id}/reverse:
+    parameters:
+      - { $ref: '#/components/parameters/LoanId' }
+      - in: path
+        name: payment_id
+        required: true
+        schema: { type: integer }
+    post:
+      tags: [Payments]
+      summary: Reverse a recorded payment
+      operationId: reverseLoanPayment
+      x-function: loans:record_payment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 1 }
+      responses:
+        '200':
+          description: Payment reversed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoanPayment' }
+
+  /loans/payments:
+    get:
+      tags: [Payments]
+      summary: List all payments across all loans
+      operationId: listAllLoanPayments
+      x-function: loans:view
+      parameters:
+        - in: query
+          name: loan_id
+          schema: { type: string, format: uuid }
+        - in: query
+          name: from_date
+          schema: { type: string, format: date }
+        - in: query
+          name: to_date
+          schema: { type: string, format: date }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoanPaymentListResponse' }
+
+  /loans/{id}/payout:
+    parameters:
+      - { $ref: '#/components/parameters/LoanId' }
+    post:
+      tags: [Payouts]
+      summary: Pay out / settle a loan
+      operationId: payoutLoan
+      x-function: loans:payout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PayoutLoanRequest' }
+      responses:
+        '200':
+          description: Loan paid out.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PayoutLoanResponse' }
+
+  /loans/{id}/payout/preview:
+    parameters:
+      - { $ref: '#/components/parameters/LoanId' }
+    post:
+      tags: [Payouts]
+      summary: Preview a payout without posting
+      operationId: previewPayoutLoan
+      x-function: loans:view
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PayoutLoanRequest' }
+      responses:
+        '200':
+          description: OK — would-be journal preview.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PayoutPreview' }
+
+  /loans/{id}/write-off:
+    parameters:
+      - { $ref: '#/components/parameters/LoanId' }
+    post:
+      tags: [WriteOffs]
+      summary: Write off a loan (debt forgiven or bad debt)
+      operationId: writeOffLoan
+      x-function: loans:write_off
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [effective_date, reason]
+              properties:
+                effective_date: { type: string, format: date }
+                reason: { type: string, minLength: 1 }
+      responses:
+        '200':
+          description: Loan written off.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Loan' }
+
+  /loans/accrual/preview:
+    get:
+      tags: [Accruals]
+      summary: Preview interest accrual for a period
+      operationId: previewLoanAccrual
+      x-function: loans:view
+      parameters:
+        - in: query
+          name: period_end
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccrualPreview' }
+
+  /loans/accrual/run:
+    post:
+      tags: [Accruals]
+      summary: Post a periodic interest accrual run (idempotent per period)
+      operationId: runLoanAccrual
+      x-function: loans:run_accrual
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [period_end]
+              properties:
+                period_end: { type: string, format: date }
+      responses:
+        '200':
+          description: Run posted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccrualRun' }
+        '409':
+          description: A posted run already exists for this period (or tenant is cash-basis).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /loans/accrual/runs:
+    get:
+      tags: [Accruals]
+      summary: List accrual runs
+      operationId: listLoanAccrualRuns
+      x-function: loans:view
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string, enum: [preview, posted, reversed] }
+        - in: query
+          name: from_date
+          schema: { type: string, format: date }
+        - in: query
+          name: to_date
+          schema: { type: string, format: date }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccrualRunListResponse' }
+
+  /loans/accrual/runs/{run_id}:
+    parameters:
+      - in: path
+        name: run_id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Accruals]
+      summary: Get an accrual run with its lines
+      operationId: getLoanAccrualRun
+      x-function: loans:view
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccrualRunDetail' }
+
+  /loans/accrual/runs/{run_id}/reverse:
+    parameters:
+      - in: path
+        name: run_id
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Accruals]
+      summary: Reverse a posted accrual run
+      operationId: reverseLoanAccrualRun
+      x-function: loans:reverse_accrual
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, minLength: 1 }
+      responses:
+        '200':
+          description: Run reversed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccrualRun' }
+
+  /loans/{id}/accrual-history:
+    parameters:
+      - { $ref: '#/components/parameters/LoanId' }
+      - { $ref: '#/components/parameters/Page' }
+      - { $ref: '#/components/parameters/PageSize' }
+    get:
+      tags: [Accruals]
+      summary: Per-loan accrual history (lines across all runs)
+      operationId: getLoanAccrualHistory
+      x-function: loans:view
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccrualLineListResponse' }
+
+components:
+  parameters:
+    LoanId:
+      in: path
+      name: id
+      required: true
+      schema: { type: string, format: uuid }
+    Page:
+      in: query
+      name: page
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      in: query
+      name: page_size
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+
+  responses:
+    BadRequest:
+      description: Input validation failed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Missing required function permission.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    FeatureUnavailable:
+      description: Tenant plan does not include the loans feature.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Not found.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: integer }
+        message: { type: string }
+
+    Money:
+      type: string
+      pattern: '^-?\d+(\.\d{1,2})?$'
+      description: "Decimal as string (e.g. '1234.56')."
+
+    LoanStatus:
+      type: string
+      enum: [draft, active, paid_out, written_off, archived]
+
+    UseOfFunds:
+      type: string
+      enum: [business, mixed, private]
+
+    Loan:
+      type: object
+      required:
+        - id
+        - name
+        - lender_eca_id
+        - original_amount
+        - current_balance
+        - accrued_interest_balance
+        - interest_rate_annual_pct
+        - status
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        lender_eca_id: { type: integer }
+        lender_name: { type: string, description: "Joined from entity for display." }
+        original_amount: { $ref: '#/components/schemas/Money' }
+        current_balance: { $ref: '#/components/schemas/Money' }
+        accrued_interest_balance: { $ref: '#/components/schemas/Money' }
+        interest_rate_annual_pct: { type: string, description: "Decimal as string, e.g. '6.5000' for 6.5%." }
+        compounding_frequency: { type: string, enum: [daily, monthly, quarterly, annually, none] }
+        repayment_frequency: { type: string, enum: [weekly, fortnightly, monthly, quarterly, annually, none] }
+        repayment_amount: { $ref: '#/components/schemas/Money' }
+        start_date: { type: string, format: date }
+        maturity_date: { type: string, format: date, nullable: true }
+        use_of_funds: { $ref: '#/components/schemas/UseOfFunds' }
+        business_use_pct: { type: string, nullable: true, description: "0.00–100.00 as string. Required when use_of_funds=mixed." }
+        liability_account_id: { type: integer }
+        accrued_interest_account_id: { type: integer }
+        interest_expense_account_id: { type: integer }
+        status: { $ref: '#/components/schemas/LoanStatus' }
+        origination_transaction_id: { type: integer, nullable: true }
+        payout_transaction_id: { type: integer, nullable: true }
+        payout_date: { type: string, format: date, nullable: true }
+        written_off_transaction_id: { type: integer, nullable: true }
+        written_off_date: { type: string, format: date, nullable: true }
+        correction_id: { type: string, format: uuid, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    LoanListResponse:
+      type: object
+      required: [items, totals, pagination]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Loan' }
+        totals:
+          type: object
+          required: [count_active, total_principal_balance, total_accrued_interest, total_periodic_obligation]
+          properties:
+            count_active: { type: integer }
+            count_paid_out: { type: integer }
+            count_written_off: { type: integer }
+            total_principal_balance: { $ref: '#/components/schemas/Money' }
+            total_accrued_interest: { $ref: '#/components/schemas/Money' }
+            total_periodic_obligation: { $ref: '#/components/schemas/Money' }
+        pagination: { $ref: '#/components/schemas/Pagination' }
+
+    Pagination:
+      type: object
+      required: [page, page_size, total]
+      properties:
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+
+    OriginateLoanRequest:
+      type: object
+      required:
+        - name
+        - lender_eca_id
+        - original_amount
+        - interest_rate_annual_pct
+        - start_date
+        - receiving_account_id
+        - use_of_funds
+      properties:
+        name: { type: string, minLength: 1 }
+        description: { type: string }
+        lender_eca_id: { type: integer }
+        original_amount: { $ref: '#/components/schemas/Money' }
+        interest_rate_annual_pct: { type: string }
+        compounding_frequency: { type: string, enum: [daily, monthly, quarterly, annually, none], default: monthly }
+        repayment_frequency: { type: string, enum: [weekly, fortnightly, monthly, quarterly, annually, none], default: monthly }
+        repayment_amount: { $ref: '#/components/schemas/Money' }
+        start_date: { type: string, format: date }
+        maturity_date: { type: string, format: date }
+        use_of_funds: { $ref: '#/components/schemas/UseOfFunds' }
+        business_use_pct: { type: string, description: "Required when use_of_funds=mixed." }
+        liability_account_id_override: { type: integer }
+        accrued_interest_account_id_override: { type: integer }
+        interest_expense_account_id_override: { type: integer }
+        receiving_account_id: { type: integer, description: "Bank account for cash proceeds, or capital account for asset-funded drawdowns." }
+        establishment_fee: { $ref: '#/components/schemas/Money' }
+        establishment_fee_bank_account_id: { type: integer }
+
+    EditLoanNonPostingRequest:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+        use_of_funds: { $ref: '#/components/schemas/UseOfFunds' }
+        business_use_pct: { type: string }
+
+    LoanSchedule:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ScheduleEntry' }
+
+    ScheduleEntry:
+      type: object
+      required: [period_end, principal, interest, total, balance_after]
+      properties:
+        period_end: { type: string, format: date }
+        principal: { $ref: '#/components/schemas/Money' }
+        interest: { $ref: '#/components/schemas/Money' }
+        total: { $ref: '#/components/schemas/Money' }
+        balance_after: { $ref: '#/components/schemas/Money' }
+
+    LoanPayment:
+      type: object
+      required: [id, loan_id, payment_date, principal_amount, interest_amount, total_amount, balance_after]
+      properties:
+        id: { type: integer }
+        loan_id: { type: string, format: uuid }
+        payment_date: { type: string, format: date }
+        principal_amount: { $ref: '#/components/schemas/Money' }
+        interest_amount: { $ref: '#/components/schemas/Money' }
+        total_amount: { $ref: '#/components/schemas/Money' }
+        balance_after: { $ref: '#/components/schemas/Money' }
+        bank_account_id: { type: integer }
+        transaction_id: { type: integer }
+        reversed_transaction_id: { type: integer, nullable: true }
+        notes: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    LoanPaymentListResponse:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/LoanPayment' }
+        pagination: { $ref: '#/components/schemas/Pagination' }
+
+    RecordPaymentRequest:
+      type: object
+      required: [payment_date, principal_amount, interest_amount, bank_account_id]
+      properties:
+        payment_date: { type: string, format: date }
+        principal_amount: { $ref: '#/components/schemas/Money' }
+        interest_amount: { $ref: '#/components/schemas/Money' }
+        bank_account_id: { type: integer }
+        notes: { type: string }
+
+    PayoutLoanRequest:
+      type: object
+      required: [payout_date, principal_clearance, interest_clearance, bank_account_id]
+      properties:
+        payout_date: { type: string, format: date }
+        principal_clearance: { $ref: '#/components/schemas/Money' }
+        interest_clearance: { $ref: '#/components/schemas/Money' }
+        termination_fee: { $ref: '#/components/schemas/Money' }
+        bank_account_id: { type: integer }
+        termination_fee_bank_account_id: { type: integer }
+
+    PayoutLoanResponse:
+      type: object
+      required: [loan, parent_transaction_id]
+      properties:
+        loan: { $ref: '#/components/schemas/Loan' }
+        parent_transaction_id: { type: integer }
+        pro_rata_accrual: { $ref: '#/components/schemas/Money' }
+
+    JournalRow:
+      type: object
+      required: [account_id, side, amount]
+      properties:
+        account_id: { type: integer }
+        account_name: { type: string }
+        side: { type: string, enum: [debit, credit] }
+        amount: { $ref: '#/components/schemas/Money' }
+        tags:
+          type: object
+          additionalProperties: true
+
+    PayoutPreview:
+      type: object
+      required: [current_balance, total_cash_outlay, rows]
+      properties:
+        current_balance: { $ref: '#/components/schemas/Money' }
+        accrued_interest_to_payout_date: { $ref: '#/components/schemas/Money' }
+        termination_fee: { $ref: '#/components/schemas/Money' }
+        total_cash_outlay: { $ref: '#/components/schemas/Money' }
+        estimated_savings_vs_remaining_term: { $ref: '#/components/schemas/Money' }
+        rows:
+          type: array
+          items: { $ref: '#/components/schemas/JournalRow' }
+
+    AccrualPreview:
+      type: object
+      required: [period_start, period_end, total_accrued, lines]
+      properties:
+        period_start: { type: string, format: date }
+        period_end: { type: string, format: date }
+        total_accrued: { $ref: '#/components/schemas/Money' }
+        lines:
+          type: array
+          items: { $ref: '#/components/schemas/AccrualPreviewLine' }
+
+    AccrualPreviewLine:
+      type: object
+      required: [loan_id, name, amount, balance_at_period_start, days_in_period]
+      properties:
+        loan_id: { type: string, format: uuid }
+        name: { type: string }
+        amount: { $ref: '#/components/schemas/Money' }
+        balance_at_period_start: { $ref: '#/components/schemas/Money' }
+        interest_rate_used: { type: string }
+        days_in_period: { type: integer }
+
+    AccrualRun:
+      type: object
+      required: [id, period_start, period_end, status, total_accrued]
+      properties:
+        id: { type: string, format: uuid }
+        period_start: { type: string, format: date }
+        period_end: { type: string, format: date }
+        status: { type: string, enum: [preview, posted, reversed] }
+        total_accrued: { $ref: '#/components/schemas/Money' }
+        parent_transaction_id: { type: integer, nullable: true }
+        posted_by: { type: string, format: uuid, nullable: true }
+        posted_at: { type: string, format: date-time, nullable: true }
+        reversed_by: { type: string, format: uuid, nullable: true }
+        reversed_at: { type: string, format: date-time, nullable: true }
+        reversal_transaction_id: { type: integer, nullable: true }
+
+    AccrualRunDetail:
+      allOf:
+        - { $ref: '#/components/schemas/AccrualRun' }
+        - type: object
+          properties:
+            lines:
+              type: array
+              items: { $ref: '#/components/schemas/AccrualRunLine' }
+
+    AccrualRunLine:
+      type: object
+      required: [id, run_id, loan_id, amount]
+      properties:
+        id: { type: integer }
+        run_id: { type: string, format: uuid }
+        loan_id: { type: string, format: uuid }
+        loan_name: { type: string }
+        amount: { $ref: '#/components/schemas/Money' }
+        balance_at_period_start: { $ref: '#/components/schemas/Money' }
+        days_in_period: { type: integer }
+        interest_rate_used: { type: string }
+
+    AccrualRunListResponse:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AccrualRun' }
+        pagination: { $ref: '#/components/schemas/Pagination' }
+
+    AccrualLineListResponse:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AccrualRunLine' }
+        pagination: { $ref: '#/components/schemas/Pagination' }
+
+    ActivityEntry:
+      type: object
+      required: [id, entity_type, entity_id, action, created_at]
+      properties:
+        id: { type: integer }
+        entity_type: { type: string }
+        entity_id: { type: string }
+        action: { type: string }
+        actor_user_id: { type: string, format: uuid, nullable: true }
+        actor_display_name: { type: string, nullable: true }
+        before_json:
+          type: object
+          additionalProperties: true
+        after_json:
+          type: object
+          additionalProperties: true
+        created_at: { type: string, format: date-time }
+
+    ActivityListResponse:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ActivityEntry' }
+        pagination: { $ref: '#/components/schemas/Pagination' }

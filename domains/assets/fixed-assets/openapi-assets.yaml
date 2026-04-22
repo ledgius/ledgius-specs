@@ -1,0 +1,722 @@
+# Spec references: R-0062, A-0040, A-0041, T-0029, T-0030, T-0031, T-0032.
+#
+# OpenAPI contract for the fixed-assets endpoints. This is the authoritative
+# request/response shape — backend and frontend must conform. Generated
+# clients (if added later) derive from this file.
+
+openapi: 3.1.0
+info:
+  title: Ledgius Fixed Assets API
+  version: "1.0.0"
+  description: |
+    Endpoints for managing fixed assets: register, acquisition, disposal,
+    depreciation (preview, run, reverse, history). All endpoints are under
+    `/api/v1` and require:
+      - Authenticated JWT with a selected tenant.
+      - Plan feature: `fixed_assets`.
+      - Role function permission (see `x-function` on each operation).
+
+servers:
+  - url: https://api.ledgius.com/api/v1
+    description: Production
+  - url: http://localhost:8090/api/v1
+    description: Local dev
+
+tags:
+  - name: Assets
+    description: Asset register, detail, non-posting edit.
+  - name: Acquisitions
+    description: Buy asset (cash or bill-linked).
+  - name: Disposals
+    description: Sell, scrap, donate, trade-in.
+  - name: Depreciation
+    description: Preview, run, reverse, history.
+
+paths:
+  /assets:
+    get:
+      tags: [Assets]
+      summary: List assets
+      operationId: listAssets
+      x-function: assets:view
+      parameters:
+        - in: query
+          name: status
+          schema: { type: array, items: { $ref: '#/components/schemas/AssetStatus' } }
+          style: form
+          explode: true
+        - in: query
+          name: category_id
+          schema: { type: string, format: uuid }
+        - in: query
+          name: purchase_from
+          schema: { type: string, format: date }
+        - in: query
+          name: purchase_to
+          schema: { type: string, format: date }
+        - in: query
+          name: q
+          schema: { type: string }
+          description: Free-text search on asset name.
+        - in: query
+          name: include_disposed
+          schema: { type: boolean, default: false }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssetListResponse' }
+    post:
+      tags: [Acquisitions]
+      summary: Acquire an asset (cash, new bill, or bill-linked)
+      operationId: acquireAsset
+      x-function: assets:create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AcquireAssetRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Asset' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '402': { $ref: '#/components/responses/FeatureUnavailable' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: Conflict — e.g. bill not reclassifiable, instant-writeoff cost exceeds threshold.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /assets/{id}:
+    parameters:
+      - { $ref: '#/components/parameters/AssetId' }
+    get:
+      tags: [Assets]
+      summary: Get an asset by id
+      operationId: getAsset
+      x-function: assets:view
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Asset' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Assets]
+      summary: Edit non-posting fields (name, description, business_use_pct)
+      operationId: editAssetNonPosting
+      x-function: assets:edit
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EditAssetNonPostingRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Asset' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /assets/{id}/activity:
+    parameters:
+      - { $ref: '#/components/parameters/AssetId' }
+      - { $ref: '#/components/parameters/Page' }
+      - { $ref: '#/components/parameters/PageSize' }
+    get:
+      tags: [Assets]
+      summary: Audit timeline for an asset (newest first)
+      operationId: listAssetActivity
+      x-function: assets:view
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ActivityListResponse' }
+
+  /assets/{id}/dispose:
+    parameters:
+      - { $ref: '#/components/parameters/AssetId' }
+    post:
+      tags: [Disposals]
+      summary: Dispose an asset (sell, scrap, donate, trade-in)
+      operationId: disposeAsset
+      x-function: assets:dispose
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DisposeAssetRequest' }
+      responses:
+        '200':
+          description: OK — asset disposed, journal posted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DisposeAssetResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409':
+          description: Conflict — period locked, asset already disposed, etc.
+
+  /assets/{id}/dispose/preview:
+    parameters:
+      - { $ref: '#/components/parameters/AssetId' }
+    post:
+      tags: [Disposals]
+      summary: Preview a disposal without posting (dry-run).
+      operationId: previewDisposeAsset
+      x-function: assets:view
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DisposeAssetRequest' }
+      responses:
+        '200':
+          description: OK — shows pro-rata dep + disposal rows that would post.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DisposalPreview' }
+
+  /assets/{id}/depreciation-history:
+    parameters:
+      - { $ref: '#/components/parameters/AssetId' }
+      - { $ref: '#/components/parameters/Page' }
+      - { $ref: '#/components/parameters/PageSize' }
+    get:
+      tags: [Depreciation]
+      summary: Per-asset depreciation history (lines across all runs)
+      operationId: getAssetDepreciationHistory
+      x-function: assets:view
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DepreciationLineListResponse' }
+
+  /assets/categories:
+    get:
+      tags: [Assets]
+      summary: List tenant asset categories
+      operationId: listAssetCategories
+      x-function: assets:view
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AssetCategory' }
+
+  /assets/instant-writeoff-threshold:
+    get:
+      tags: [Assets]
+      summary: Get the instant write-off threshold for a financial year
+      operationId: getInstantWriteoffThreshold
+      x-function: assets:view
+      parameters:
+        - in: query
+          name: fy_start
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [fy_start, fy_end, threshold_aud]
+                properties:
+                  fy_start: { type: string, format: date }
+                  fy_end: { type: string, format: date }
+                  threshold_aud: { type: string, description: "Decimal as string (e.g. '20000.00')" }
+
+  /assets/depreciation/preview:
+    get:
+      tags: [Depreciation]
+      summary: Preview depreciation for a period
+      operationId: previewDepreciation
+      x-function: assets:view
+      parameters:
+        - in: query
+          name: period_end
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DepreciationPreview' }
+
+  /assets/depreciation/run:
+    post:
+      tags: [Depreciation]
+      summary: Post a depreciation run for a period (idempotent per period)
+      operationId: runDepreciation
+      x-function: assets:run_depreciation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [period_end]
+              properties:
+                period_end: { type: string, format: date }
+      responses:
+        '200':
+          description: Run posted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DepreciationRun' }
+        '409':
+          description: A posted run already exists for this period.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /assets/depreciation/runs:
+    get:
+      tags: [Depreciation]
+      summary: List depreciation runs
+      operationId: listDepreciationRuns
+      x-function: assets:view
+      parameters:
+        - in: query
+          name: status
+          schema: { type: string, enum: [preview, posted, reversed] }
+        - in: query
+          name: from_date
+          schema: { type: string, format: date }
+        - in: query
+          name: to_date
+          schema: { type: string, format: date }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DepreciationRunListResponse' }
+
+  /assets/depreciation/runs/{run_id}:
+    parameters:
+      - in: path
+        name: run_id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Depreciation]
+      summary: Get a depreciation run with its lines
+      operationId: getDepreciationRun
+      x-function: assets:view
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DepreciationRunDetail' }
+
+  /assets/depreciation/runs/{run_id}/reverse:
+    parameters:
+      - in: path
+        name: run_id
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Depreciation]
+      summary: Reverse a posted depreciation run
+      operationId: reverseDepreciationRun
+      x-function: assets:reverse_depreciation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason:
+                  type: string
+                  minLength: 1
+                  description: Human-readable reason, stored in audit log.
+      responses:
+        '200':
+          description: Run reversed.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DepreciationRun' }
+        '409':
+          description: Already reversed, or not posted.
+
+components:
+  parameters:
+    AssetId:
+      in: path
+      name: id
+      required: true
+      schema: { type: string, format: uuid }
+    Page:
+      in: query
+      name: page
+      schema: { type: integer, minimum: 1, default: 1 }
+    PageSize:
+      in: query
+      name: page_size
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+
+  responses:
+    BadRequest:
+      description: Input validation failed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: Missing required function permission.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    FeatureUnavailable:
+      description: Tenant plan does not include the fixed_assets feature.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Not found.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: integer }
+        message: { type: string }
+        details:
+          type: object
+          additionalProperties: true
+
+    Money:
+      type: string
+      pattern: '^-?\d+(\.\d{1,2})?$'
+      description: "Decimal as string to avoid float precision issues (e.g. '1234.56')."
+
+    AssetStatus:
+      type: string
+      enum: [draft, active, fully_depreciated, disposed, archived]
+
+    DepreciationMethod:
+      type: string
+      enum: [straight_line, diminishing_value, instant_writeoff]
+
+    AssetCategory:
+      type: object
+      required: [id, code, name]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        default_capital_account_id: { type: integer, nullable: true }
+        default_accum_depr_account_id: { type: integer, nullable: true }
+        default_depreciation_expense_account_id: { type: integer, nullable: true }
+        active: { type: boolean }
+
+    Asset:
+      type: object
+      required:
+        - id
+        - name
+        - category_id
+        - purchase_date
+        - cost_ex_gst
+        - depreciation_method
+        - status
+        - accumulated_depreciation
+        - book_value
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        category_id: { type: string, format: uuid }
+        category: { $ref: '#/components/schemas/AssetCategory' }
+        purchase_date: { type: string, format: date }
+        cost_ex_gst: { $ref: '#/components/schemas/Money' }
+        gst_amount: { $ref: '#/components/schemas/Money' }
+        useful_life_years: { type: integer, nullable: true, minimum: 1 }
+        residual_value: { $ref: '#/components/schemas/Money' }
+        depreciation_method: { $ref: '#/components/schemas/DepreciationMethod' }
+        accumulated_depreciation: { $ref: '#/components/schemas/Money' }
+        book_value: { $ref: '#/components/schemas/Money' }
+        business_use_pct: { type: string, nullable: true, description: "0.00–100.00 as string" }
+        status: { $ref: '#/components/schemas/AssetStatus' }
+        capital_account_id: { type: integer }
+        accum_depreciation_account_id: { type: integer }
+        depreciation_expense_account_id: { type: integer }
+        supplier_entity_id: { type: integer, nullable: true }
+        linked_bill_id: { type: integer, nullable: true }
+        acquisition_transaction_id: { type: integer, nullable: true }
+        disposal_transaction_id: { type: integer, nullable: true }
+        disposal_date: { type: string, format: date, nullable: true }
+        correction_id: { type: string, format: uuid, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    AssetListResponse:
+      type: object
+      required: [items, totals, pagination]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Asset' }
+        totals:
+          type: object
+          required: [count_active, total_cost, total_accumulated, total_book_value]
+          properties:
+            count_active: { type: integer }
+            count_disposed: { type: integer }
+            count_fully_depreciated: { type: integer }
+            total_cost: { $ref: '#/components/schemas/Money' }
+            total_accumulated: { $ref: '#/components/schemas/Money' }
+            total_book_value: { $ref: '#/components/schemas/Money' }
+        pagination: { $ref: '#/components/schemas/Pagination' }
+
+    Pagination:
+      type: object
+      required: [page, page_size, total]
+      properties:
+        page: { type: integer }
+        page_size: { type: integer }
+        total: { type: integer }
+
+    AcquireAssetRequest:
+      type: object
+      required:
+        - name
+        - category_id
+        - purchase_date
+        - cost_ex_gst
+        - depreciation_method
+        - entry_mode
+      properties:
+        name: { type: string, minLength: 1 }
+        description: { type: string }
+        category_id: { type: string, format: uuid }
+        purchase_date: { type: string, format: date }
+        cost_ex_gst: { $ref: '#/components/schemas/Money' }
+        gst_amount: { $ref: '#/components/schemas/Money' }
+        gst_applies: { type: boolean, default: true }
+        useful_life_years:
+          type: integer
+          minimum: 1
+          description: Required unless method is instant_writeoff.
+        residual_value: { $ref: '#/components/schemas/Money' }
+        depreciation_method: { $ref: '#/components/schemas/DepreciationMethod' }
+        business_use_pct: { type: string, description: "Required for Motor Vehicles; null otherwise." }
+        supplier_entity_id: { type: integer }
+        capital_account_id_override: { type: integer }
+        entry_mode:
+          type: string
+          enum: [cash, create_new_bill, link_existing_bill]
+        cash_mode:
+          type: object
+          description: Required when entry_mode=cash.
+          properties:
+            bank_account_id: { type: integer }
+        new_bill_mode:
+          type: object
+          description: Required when entry_mode=create_new_bill.
+          properties:
+            bill_reference: { type: string }
+            bill_date: { type: string, format: date }
+            due_date: { type: string, format: date }
+        link_bill_mode:
+          type: object
+          description: Required when entry_mode=link_existing_bill.
+          properties:
+            bill_id: { type: integer }
+            bill_line_ids:
+              type: array
+              items: { type: integer }
+
+    EditAssetNonPostingRequest:
+      type: object
+      properties:
+        name: { type: string }
+        description: { type: string }
+        business_use_pct: { type: string }
+
+    DisposeAssetRequest:
+      type: object
+      required:
+        - disposal_date
+        - sale_proceeds_inc_gst
+        - reason
+      properties:
+        disposal_date: { type: string, format: date }
+        sale_proceeds_inc_gst: { $ref: '#/components/schemas/Money' }
+        gst_on_sale: { $ref: '#/components/schemas/Money' }
+        reason:
+          type: string
+          enum: [sold, scrapped, donated, traded_in]
+        buyer_entity_id: { type: integer }
+        destination_bank_account_id:
+          type: integer
+          description: Required when reason=sold and cash receipt.
+        ar_buyer_entity_credit_account_id:
+          type: integer
+          description: Required when reason=sold and credit sale.
+
+    DisposeAssetResponse:
+      type: object
+      required: [asset, parent_transaction_id, gain_loss]
+      properties:
+        asset: { $ref: '#/components/schemas/Asset' }
+        parent_transaction_id: { type: integer }
+        pro_rata_depreciation: { $ref: '#/components/schemas/Money' }
+        gain_loss: { $ref: '#/components/schemas/Money' }
+
+    JournalRow:
+      type: object
+      required: [account_id, side, amount]
+      properties:
+        account_id: { type: integer }
+        account_name: { type: string }
+        side: { type: string, enum: [debit, credit] }
+        amount: { $ref: '#/components/schemas/Money' }
+        tags:
+          type: object
+          additionalProperties: true
+
+    DisposalPreview:
+      type: object
+      required: [book_value, gain_loss, rows]
+      properties:
+        book_value: { $ref: '#/components/schemas/Money' }
+        pro_rata_depreciation: { $ref: '#/components/schemas/Money' }
+        gain_loss: { $ref: '#/components/schemas/Money' }
+        rows:
+          type: array
+          items: { $ref: '#/components/schemas/JournalRow' }
+
+    DepreciationPreview:
+      type: object
+      required: [period_start, period_end, total_amount, lines]
+      properties:
+        period_start: { type: string, format: date }
+        period_end: { type: string, format: date }
+        total_amount: { $ref: '#/components/schemas/Money' }
+        lines:
+          type: array
+          items: { $ref: '#/components/schemas/DepreciationPreviewLine' }
+
+    DepreciationPreviewLine:
+      type: object
+      required: [asset_id, name, method, amount, book_value_before, book_value_after]
+      properties:
+        asset_id: { type: string, format: uuid }
+        name: { type: string }
+        method: { $ref: '#/components/schemas/DepreciationMethod' }
+        amount: { $ref: '#/components/schemas/Money' }
+        deductible_amount: { $ref: '#/components/schemas/Money' }
+        non_deductible_amount: { $ref: '#/components/schemas/Money' }
+        book_value_before: { $ref: '#/components/schemas/Money' }
+        book_value_after: { $ref: '#/components/schemas/Money' }
+        days_in_period: { type: integer }
+
+    DepreciationRun:
+      type: object
+      required: [id, period_start, period_end, status, total_amount]
+      properties:
+        id: { type: string, format: uuid }
+        period_start: { type: string, format: date }
+        period_end: { type: string, format: date }
+        status: { type: string, enum: [preview, posted, reversed] }
+        total_amount: { $ref: '#/components/schemas/Money' }
+        parent_transaction_id: { type: integer, nullable: true }
+        posted_by: { type: string, format: uuid, nullable: true }
+        posted_at: { type: string, format: date-time, nullable: true }
+        reversed_by: { type: string, format: uuid, nullable: true }
+        reversed_at: { type: string, format: date-time, nullable: true }
+        reversal_transaction_id: { type: integer, nullable: true }
+
+    DepreciationRunDetail:
+      allOf:
+        - { $ref: '#/components/schemas/DepreciationRun' }
+        - type: object
+          properties:
+            lines:
+              type: array
+              items: { $ref: '#/components/schemas/DepreciationRunLine' }
+
+    DepreciationRunLine:
+      type: object
+      required: [id, run_id, asset_id, amount, book_value_before, book_value_after, days_in_period, method]
+      properties:
+        id: { type: integer }
+        run_id: { type: string, format: uuid }
+        asset_id: { type: string, format: uuid }
+        asset_name: { type: string }
+        amount: { $ref: '#/components/schemas/Money' }
+        deductible_amount: { $ref: '#/components/schemas/Money' }
+        book_value_before: { $ref: '#/components/schemas/Money' }
+        book_value_after: { $ref: '#/components/schemas/Money' }
+        days_in_period: { type: integer }
+        method: { $ref: '#/components/schemas/DepreciationMethod' }
+
+    DepreciationRunListResponse:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/DepreciationRun' }
+        pagination: { $ref: '#/components/schemas/Pagination' }
+
+    DepreciationLineListResponse:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/DepreciationRunLine' }
+        pagination: { $ref: '#/components/schemas/Pagination' }
+
+    ActivityEntry:
+      type: object
+      required: [id, entity_type, entity_id, action, created_at]
+      properties:
+        id: { type: integer }
+        entity_type: { type: string }
+        entity_id: { type: string }
+        action: { type: string }
+        actor_user_id: { type: string, format: uuid, nullable: true }
+        actor_display_name: { type: string, nullable: true }
+        payload:
+          type: object
+          additionalProperties: true
+        created_at: { type: string, format: date-time }
+
+    ActivityListResponse:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/ActivityEntry' }
+        pagination: { $ref: '#/components/schemas/Pagination' }
